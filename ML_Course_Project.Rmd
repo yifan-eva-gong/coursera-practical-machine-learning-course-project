@@ -1,0 +1,93 @@
+---
+title: "Coursera Practical Machine Learning Course Project"
+output: html_document
+author: Eva Yifan Gong
+---
+### 1. Problem Setup 
+
+This write-up is for the final project of Coursera's Practical Machine Learning course. In this project, the objective is to perform classification algorithms on a data set collected from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. Each of the participant was asked to do barbell lifts correctly and incorrectly in 5 different ways, encoded as "A", "B", "C", "D", "E" under the `classe` column. 
+
+This report describes the model I build, cross validation techniques used to improve the model, the expected out of sample error and the predicted outform for 20 test cases.
+
+Notes:
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+
+### 2.Data Cleaning
+The project starts with preliminary data cleaning. After importing relevant libraries and the raw data, I first use `createDataPartition` to split the training dataset into a training and a testing data set, in order to calculate the sample error rate. Next, I remove columns with zero variance, using `nearZeroVar` function, and columns that are mostly NAs, which are all variables with little prediction power. After these steps, I reduce the column size of the training set from 160 to 58. Same columns are removed for the testing set.
+
+```{r}
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(RColorBrewer)
+library(rattle)
+library(randomForest)
+training <- read.csv("./Data/pml-training.csv")
+testing <- read.csv("./Data/pml-testing.csv")
+```
+
+```{r}
+in_My_Training <- createDataPartition(y=training$classe,p=0.6,list=FALSE)
+my_Training <- training[in_My_Training,]
+my_Testing <- training[-in_My_Training,]
+```
+
+```{r}
+zeros <- nearZeroVar(my_Training,saveMetrics = TRUE)
+my_Training <- my_Training[,zeros$nzv==FALSE]
+my_Training <- my_Training[2:dim(my_Training)[2]]
+```
+
+```{r}
+my_Training_2 <- my_Training
+for(i in 1:length(my_Training)) {
+    if( sum( is.na( my_Training[, i] ) ) /nrow(my_Training) >= .7) {
+        for(j in 1:length(my_Training_2)) {
+            if( length( grep(names(my_Training[i]), names(my_Training_2)[j]) ) == 1)  {
+                my_Training_2 <- my_Training_2[ , -j]
+            }   
+        } 
+    }
+}
+my_Training <- my_Training_2
+rm(my_Training_2)
+cols <- colnames(my_Training)
+my_Testing <- my_Testing[cols]
+```
+
+
+### 3.Decision Trees
+I first build a decision tree with the `rpart` project. Decision tree is considered to be a good classification algorithm because its results are easy to interpret. As shown below, Using the `class` method (since the dependent variable is a factor), the decision tree model has an accuracy rate as high as 0.88. Therefore, the out-of-sample error rate is `1-0.88=0.12`.
+
+```{r}
+mod_tree <- rpart(classe ~ ., data=my_Training, method="class")
+rattle::fancyRpartPlot(mod_tree)
+confusionMatrix(my_Testing$classe,predict(mod_tree,my_Testing,type="class"))
+```
+
+### 4.Random Forests
+
+I next build a random forest model using the `randomForest` package. It is an exsemble model that bootstraps samples from training data, split and bootstrap variables, and grow trees repeatedly. Although less comprehensible than decision trees, it improves the accuracy rate substantially to `0.9981`. Therefore, the out-of-sample error rate is `1-0.9981=0.0019`.
+
+```{r}
+mod_rf<- randomForest(classe ~ ., data=my_Training)
+confusionMatrix(predict(mod_rf,my_Testing,type="class"),my_Testing$classe)
+```
+
+
+### 5.Predictions
+In the last step, I use the two models built in previous sessions to predict the class for the test cases.
+```{r}
+cols2 <- colnames(my_Training[, -58])
+testing <- testing[cols2]
+predict(mod_tree,testing,type="class")
+levels(testing$cvtd_timestamp) <- levels(my_Training$cvtd_timestamp)
+predict(mod_rf,testing,type="class")
+```
+
